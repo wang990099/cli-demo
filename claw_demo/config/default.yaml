@@ -32,6 +32,8 @@ skills:
     - summarize
     - email
   timeout_sec: 20
+  max_steps: 6
+  import_dirs: []
 
 file_access:
   workspace_dir: ${WORKSPACE_DIR}

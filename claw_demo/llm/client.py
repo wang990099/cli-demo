@@ -25,7 +25,7 @@ class LLMClient:
         system_prompt = (
             "你是 CLI AI 助手。"
             "必须返回 JSON，格式为:"
-            '{"type":"final|skill_call","text":"...","skill":{"name":"...","args":{}}}。'
+            '{"type":"final|skill_call","text":"...","skill":{"name":"...","args":{"request":"..."}}}。'
             f"可用技能: {', '.join(skill_names)}。"
             f"长期记忆: {' | '.join(memory_snippets[:3])}"
         )

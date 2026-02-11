@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
-
-from pydantic import BaseModel
+from typing import Any
 
 from claw_demo.config.schema import Config
 
@@ -24,8 +22,9 @@ class SkillResult:
 
 
 @dataclass
-class SkillSpec:
+class AgentSkillSpec:
     name: str
     description: str
-    args_model: type[BaseModel]
-    runner: Callable[[BaseModel, SkillContext], SkillResult]
+    instructions: str
+    directory_name: str
+    source_path: Path

@@ -5,7 +5,7 @@ Python CLI Demo，支持：
 - Chat 流式输出（可在会话内开关）
 - 渐进式 grep 记忆
 - 基于模型理解的自动记忆抽取（非规则）
-- Skills：`weather` / `file_search` / `file_read` / `summarize` / `email`
+- Agent Skills：`weather` / `file_search` / `file_read` / `summarize` / `email`
 - OpenAI v1 compatible SDK
 - 默认配置文件 + `.env` 环境变量
 
@@ -41,6 +41,14 @@ cp .env.example .env
 - 内部流程为 `propose -> verify -> commit`，先产出候选记忆，再审核后写入
 - 需要可用的 `OPENAI_API_KEY`（或你的兼容网关 key）
 - 无 key 时不会自动写入长期记忆（手动 `claw mem add` 仍可用）
+
+技能执行说明：
+- 技能定义文件位于 `claw_demo/skills/agents/*/SKILL.md`
+- 执行流程为 Agent 运行时：模型根据技能说明自由规划，按需调用工具，最后输出结果
+- 无 key 时 Agent Skills 不执行（会返回错误并提示配置 `llm.api_key`）
+- 支持外部技能导入：在配置中设置 `skills.import_dirs`，目录支持
+  - `<dir>/agents/<skill>/SKILL.md`
+  - `<dir>/<skill>/SKILL.md`
 
 邮件配置说明（`email.smtp`）：
 - `use_ssl=true`：使用 `SMTP_SSL`（如 465）

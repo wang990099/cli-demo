@@ -5,6 +5,7 @@ from pathlib import Path
 from claw_demo.chat.engine import ChatEngine
 from claw_demo.config.loader import load_config
 from claw_demo.memory.grep_retriever import MemoryEntry
+from claw_demo.skills.models import SkillResult
 
 
 class StubExtractor:
@@ -34,6 +35,7 @@ def test_chat_skill_roundtrip(tmp_path: Path) -> None:
     (tmp_path / "README.md").write_text("hello", encoding="utf-8")
 
     engine = ChatEngine(config=cfg, project_root=tmp_path)
+    engine.dispatcher.dispatch = lambda *args, **kwargs: SkillResult(ok=True, text="hello")  # type: ignore[assignment]
     out = engine.handle_user_input("请读文件 README.md")
     assert "hello" in out
 
@@ -91,6 +93,7 @@ def test_chat_stream_writer(tmp_path: Path) -> None:
     (tmp_path / "README.md").write_text("hello", encoding="utf-8")
 
     engine = ChatEngine(config=cfg, project_root=tmp_path)
+    engine.dispatcher.dispatch = lambda *args, **kwargs: SkillResult(ok=True, text="hello")  # type: ignore[assignment]
     chunks: list[str] = []
     final = engine.handle_user_input(
         "请读文件 README.md",

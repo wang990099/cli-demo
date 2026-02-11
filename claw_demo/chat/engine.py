@@ -8,7 +8,7 @@ from claw_demo.chat.slash_commands import SlashResult, parse_slash
 from claw_demo.config.schema import Config
 from claw_demo.llm.client import LLMClient
 from claw_demo.memory.manager import MemoryManager
-from claw_demo.skills.dispatcher import SkillDispatcher
+from claw_demo.skills.dispatcher import AgentSkillDispatcher
 
 
 HELP_TEXT = (
@@ -30,7 +30,7 @@ class ChatEngine:
         self.history: list[dict[str, str]] = []
         self.last_memories: list[str] = []
         self.memory = MemoryManager(config=config, project_root=project_root)
-        self.dispatcher = SkillDispatcher(config=config, project_root=project_root)
+        self.dispatcher = AgentSkillDispatcher(config=config, project_root=project_root)
         self.llm = LLMClient(config=config)
         self._prompt_session = self._build_prompt_session()
 
@@ -98,20 +98,17 @@ class ChatEngine:
         )
 
         if envelope.type == "skill_call" and envelope.skill is not None:
-            skill_res = self.dispatcher.dispatch(envelope.skill.name, envelope.skill.args)
-            if stream_writer is None:
-                text = self.llm.finalize_with_skill(
-                    user_text=user_input,
-                    skill_name=envelope.skill.name,
-                    skill_result_text=skill_res.text,
-                )
-            else:
-                chunks: list[str] = []
-                for chunk in self.llm.finalize_with_skill_stream(
-                    user_text=user_input,
-                    skill_name=envelope.skill.name,
-                    skill_result_text=skill_res.text,
-                ):
+            request_text = envelope.skill.args.get("request") if isinstance(envelope.skill.args, dict) else None
+            skill_res = self.dispatcher.dispatch(
+                envelope.skill.name,
+                request_text=request_text or user_input,
+                recent_messages=recent,
+                memory_snippets=self.last_memories,
+            )
+            text = skill_res.text
+            if stream_writer is not None:
+                chunks = []
+                for chunk in self.llm.stream_text(text):
                     chunks.append(chunk)
                     stream_writer(chunk)
                 text = "".join(chunks)

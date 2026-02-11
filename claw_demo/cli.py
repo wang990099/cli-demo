@@ -8,7 +8,7 @@ from claw_demo.chat.engine import ChatEngine
 from claw_demo.config.loader import load_config
 from claw_demo.config.workspace import resolve_workspace_dir, write_workspace_to_env
 from claw_demo.memory.manager import MemoryManager
-from claw_demo.skills.dispatcher import SkillDispatcher
+from claw_demo.skills.dispatcher import AgentSkillDispatcher
 
 app = typer.Typer(help="Claw CLI Demo")
 mem_app = typer.Typer(help="Memory commands")
@@ -63,7 +63,7 @@ def mem_purge(scope: str = typer.Option("all", "--scope")) -> None:
 @skill_app.command("list")
 def skill_list() -> None:
     project_root, cfg = _ctx()
-    dispatcher = SkillDispatcher(config=cfg, project_root=project_root)
+    dispatcher = AgentSkillDispatcher(config=cfg, project_root=project_root)
     for name in dispatcher.enabled_skills():
         typer.echo(name)
 
@@ -71,9 +71,16 @@ def skill_list() -> None:
 @skill_app.command("check")
 def skill_check() -> None:
     project_root, cfg = _ctx()
-    dispatcher = SkillDispatcher(config=cfg, project_root=project_root)
-    for name, status in dispatcher.health_check().items():
-        typer.echo(f"{name}: {status}")
+    dispatcher = AgentSkillDispatcher(config=cfg, project_root=project_root)
+    reports = dispatcher.health_check_detailed()
+    for name, report in reports.items():
+        typer.echo(f"{name}: {report.status}")
+        for msg in report.issues:
+            typer.echo(f"  - issue: {msg}")
+        for msg in report.warnings:
+            typer.echo(f"  - warn: {msg}")
+        for msg in report.runtime:
+            typer.echo(f"  - runtime: {msg}")
 
 
 @workspace_app.command("show")
