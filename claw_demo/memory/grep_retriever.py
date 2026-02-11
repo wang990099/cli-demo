@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
+from math import exp
 from pathlib import Path
 
 
@@ -19,7 +20,7 @@ class MemoryEntry:
 @dataclass
 class RetrievedMemory:
     entry: MemoryEntry
-    score: int
+    score: float
     snippet: str
 
 
@@ -92,12 +93,13 @@ def load_all_entries(memory_root: Path) -> list[MemoryEntry]:
     return entries
 
 
-def _is_recent(updated_at: str) -> bool:
+def _age_days(updated_at: str) -> int | None:
     try:
         date = datetime.strptime(updated_at[:10], "%Y-%m-%d")
-        return date >= datetime.utcnow() - timedelta(days=7)
+        age = datetime.utcnow() - date
+        return max(0, age.days)
     except ValueError:
-        return False
+        return None
 
 
 def _snippet(entry: MemoryEntry, query_tokens: list[str]) -> str:
@@ -114,7 +116,15 @@ def _snippet(entry: MemoryEntry, query_tokens: list[str]) -> str:
     return text[:240]
 
 
-def progressive_retrieve(memory_root: Path, query: str, top_k: int = 3) -> list[RetrievedMemory]:
+def progressive_retrieve(
+    memory_root: Path,
+    query: str,
+    top_k: int = 3,
+    recent_days: int = 7,
+    episode_recent_boost: int = 2,
+    episode_stale_penalty: int = 2,
+    episode_decay_half_life_days: int = 3,
+) -> list[RetrievedMemory]:
     query_tokens = normalize_query(query)
     entries = load_all_entries(memory_root)
 
@@ -133,15 +143,20 @@ def progressive_retrieve(memory_root: Path, query: str, top_k: int = 3) -> list[
         if query_tokens and not (key_hit or title_tag_hit or content_hit):
             continue
 
-        score = 0
+        score = 0.0
         if key_hit:
             score += 3
         if title_tag_hit:
             score += 2
         if content_hit:
             score += 1
-        if _is_recent(entry.updated_at):
-            score += 1
+        age_days = _age_days(entry.updated_at)
+        if age_days is not None:
+            if recent_days > 0:
+                score += max(0.0, 1.0 - (age_days / float(recent_days)))
+        if entry.mem_type == "episode":
+            decay = exp(-float(age_days or 0) / float(episode_decay_half_life_days))
+            score += (episode_recent_boost * decay) - (episode_stale_penalty * (1.0 - decay))
 
         topic_prefix = entry.key.split(":", 1)[0]
         if topic_prefix in seen_topic_prefix:

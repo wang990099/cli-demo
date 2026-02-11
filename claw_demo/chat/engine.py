@@ -15,13 +15,62 @@ HELP_TEXT = (
     "/help - 查看帮助\n"
     "/exit - 退出聊天\n"
     "/reset - 清空短期会话\n"
-    "/mem - 查看当前注入记忆\n"
+    "/mem [help] - 查看当前注入记忆或使用说明\n"
+    "/memtype [auto|profile|fact|episode] - 查看或切换会话记忆类型\n"
     "/skills - 查看可用 skills\n"
+    "/command help <命令> - 查看某个命令详细使用\n"
     "/trace - 查看最近一次工作流轨迹\n"
     "/trace on|off - 开关自动显示轨迹\n"
     "/dryrun on|off - 开关邮件 dry-run\n"
     "/stream on|off - 开关流式输出"
 )
+
+COMMAND_HELP: dict[str, str] = {
+    "/help": "用法: /help\n说明: 显示所有可用命令概览。",
+    "/exit": "用法: /exit\n说明: 退出 chat 会话。",
+    "/reset": "用法: /reset\n说明: 只清空短期会话历史，不会删除长期记忆。",
+    "/mem": (
+        "用法:\n"
+        "/mem\n"
+        "/mem help\n"
+        "说明:\n"
+        "- `/mem` 显示当前这轮检索注入到 prompt 的记忆片段。\n"
+        "- `/mem help` 查看本命令说明。\n"
+        "注意:\n"
+        "- 若显示“当前无注入记忆”，表示本轮查询未命中长期记忆。\n"
+        "- 可尝试换关键词后再问，或用 `claw mem search \"关键词\"` 手动排查。"
+    ),
+    "/memtype": (
+        "用法:\n"
+        "/memtype\n"
+        "/memtype auto|profile|fact|episode\n"
+        "说明:\n"
+        "- `/memtype` 查看当前会话记忆类型。\n"
+        "- `/memtype profile|fact|episode` 强制本会话新写入记忆类型。\n"
+        "- `/memtype auto` 恢复由模型自行决定记忆类型。"
+    ),
+    "/skills": "用法: /skills\n说明: 显示当前启用的 Agent Skills 列表。",
+    "/trace": (
+        "用法:\n"
+        "/trace\n"
+        "/trace on\n"
+        "/trace off\n"
+        "说明:\n"
+        "- `/trace` 查看最近一次工作流工具调用轨迹。\n"
+        "- `/trace on|off` 开关每次回答后自动附带轨迹。"
+    ),
+    "/dryrun": "用法: /dryrun on|off\n说明: 控制 email 工具是否仅预演发送（默认 on）。",
+    "/stream": "用法: /stream on|off\n说明: 控制回答是否以流式方式输出。",
+    "/command": (
+        "用法:\n"
+        "/command help <命令>\n"
+        "示例:\n"
+        "/command help /mem\n"
+        "/command help mem\n"
+        "说明:\n"
+        "- 查看某一个命令的详细使用说明。"
+    ),
+}
 
 
 class ChatEngine:
@@ -30,6 +79,7 @@ class ChatEngine:
         self.project_root = project_root
         self.history: list[dict[str, str]] = []
         self.last_memories: list[str] = []
+        self.current_mem_type = config.memory.default_mem_type
         self.last_tool_trace: list[str] = []
         self.trace_auto_show = False
         self.memory = MemoryManager(config=config, project_root=project_root)
@@ -108,7 +158,11 @@ class ChatEngine:
 
         self.history.append({"role": "user", "content": user_input})
         self.history.append({"role": "assistant", "content": text})
-        self.memory.maybe_auto_extract(user_input, recent_messages=self.history[-8:])
+        self.memory.maybe_auto_extract(
+            user_input,
+            recent_messages=self.history[-8:],
+            mem_type_override=self.current_mem_type,
+        )
         return text
 
     def _handle_slash(self, user_input: str) -> SlashResult:
@@ -120,12 +174,45 @@ class ChatEngine:
             return SlashResult(handled=True, should_exit=True)
         if cmd == "/help":
             return SlashResult(handled=True, output=HELP_TEXT)
+        if cmd == "/command":
+            if not arg:
+                return SlashResult(handled=True, output=COMMAND_HELP["/command"])
+            parts = arg.strip().split(maxsplit=1)
+            if parts[0].lower() != "help":
+                return SlashResult(handled=True, output="用法: /command help <命令>")
+            if len(parts) == 1 or not parts[1].strip():
+                available = ", ".join(sorted(COMMAND_HELP.keys()))
+                return SlashResult(handled=True, output=f"请指定命令。可选: {available}")
+            target = parts[1].strip()
+            if not target.startswith("/"):
+                target = "/" + target
+            detail = COMMAND_HELP.get(target)
+            if detail is None:
+                return SlashResult(handled=True, output=f"未知命令: {target}")
+            return SlashResult(handled=True, output=detail)
         if cmd == "/reset":
             self.history.clear()
             return SlashResult(handled=True, reset_history=True, output="短期会话已清空")
         if cmd == "/mem":
-            text = "\n".join(self.last_memories) if self.last_memories else "当前无注入记忆"
+            if arg and arg.strip().lower() in {"help", "-h", "--help"}:
+                return SlashResult(handled=True, output=COMMAND_HELP["/mem"])
+            if self.last_memories:
+                text = "当前注入记忆:\n" + "\n".join(f"- {m}" for m in self.last_memories)
+            else:
+                text = (
+                    "当前无注入记忆。\n"
+                    "可用 `/mem help` 查看说明，或使用 `/command help /mem` 查看详细用法。"
+                )
             return SlashResult(handled=True, output=text)
+        if cmd == "/memtype":
+            if not arg:
+                return SlashResult(handled=True, output=f"current memtype = {self.current_mem_type}")
+            target = arg.strip().lower()
+            allowed = {"auto", "profile", "fact", "episode"}
+            if target not in allowed:
+                return SlashResult(handled=True, output="用法: /memtype auto|profile|fact|episode")
+            self.current_mem_type = target
+            return SlashResult(handled=True, output=f"current memtype = {self.current_mem_type}")
         if cmd == "/skills":
             return SlashResult(handled=True, output=", ".join(self.dispatcher.enabled_skills()))
         if cmd == "/trace":

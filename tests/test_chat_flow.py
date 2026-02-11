@@ -137,6 +137,7 @@ def test_help_slash_command(tmp_path: Path) -> None:
     assert res.handled
     assert "/exit" in res.output
     assert "/stream on|off" in res.output
+    assert "/command help <命令>" in res.output
 
 
 def test_trace_commands_and_auto_show(tmp_path: Path) -> None:
@@ -163,3 +164,47 @@ def test_trace_commands_and_auto_show(tmp_path: Path) -> None:
     off = engine._handle_slash("/trace off")
     assert off.handled
     assert "False" in off.output
+
+
+def test_command_help_and_mem_help(tmp_path: Path) -> None:
+    cfg = load_config()
+    cfg.memory.root = "./memory"
+    cfg.file_access.workspace_dir = str(tmp_path)
+    cfg.llm.api_key = ""
+
+    engine = ChatEngine(config=cfg, project_root=tmp_path)
+    cmd_help = engine._handle_slash("/command help /mem")
+    assert cmd_help.handled
+    assert "/mem help" in cmd_help.output
+
+    mem_help = engine._handle_slash("/mem help")
+    assert mem_help.handled
+    assert "当前这轮检索注入" in mem_help.output
+
+
+def test_memtype_toggle_and_apply(tmp_path: Path) -> None:
+    cfg = load_config()
+    cfg.memory.root = "./memory"
+    cfg.file_access.workspace_dir = str(tmp_path)
+    cfg.llm.api_key = ""
+    cfg.memory.default_mem_type = "auto"
+
+    engine = ChatEngine(config=cfg, project_root=tmp_path)
+    engine.workflow_runner.run = lambda **kwargs: StubWorkflowResult("done", [])  # type: ignore[assignment]
+
+    show = engine._handle_slash("/memtype")
+    assert show.handled
+    assert "auto" in show.output
+
+    set_profile = engine._handle_slash("/memtype profile")
+    assert set_profile.handled
+    assert "profile" in set_profile.output
+
+    captured: dict[str, str | None] = {}
+
+    def _capture(user_text, recent_messages=None, mem_type_override=None):
+        captured["value"] = mem_type_override
+
+    engine.memory.maybe_auto_extract = _capture  # type: ignore[assignment]
+    engine.handle_user_input("测试写入")
+    assert captured["value"] == "profile"

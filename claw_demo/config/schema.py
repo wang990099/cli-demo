@@ -34,6 +34,31 @@ class MemoryConfig(BaseModel):
     grep_context_lines: int = 6
     max_item_chars: int = 1200
     enable_auto_extract: bool = True
+    default_mem_type: Literal["auto", "profile", "fact", "episode"] = "auto"
+    episode_retention_days: int = 14
+    episode_recent_days: int = 7
+    episode_recent_boost: int = 2
+    episode_stale_penalty: int = 2
+    episode_decay_half_life_days: int = 3
+    episode_trigger_keywords: list[str] = Field(
+        default_factory=lambda: [
+            "进展",
+            "今天做了",
+            "刚完成",
+            "刚遇到问题",
+            "决定",
+            "总结",
+            "会议",
+            "计划",
+        ]
+    )
+
+    @field_validator("episode_retention_days", "episode_recent_days", "episode_decay_half_life_days")
+    @classmethod
+    def _validate_episode_days(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("episode day config must be > 0")
+        return value
 
 
 class SkillsConfig(BaseModel):

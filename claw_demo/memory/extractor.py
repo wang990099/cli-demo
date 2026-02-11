@@ -74,6 +74,7 @@ class LLMMemoryExtractor:
             "规则: 1) 无长期价值返回 {\"records\":[]}。"
             "2) key 要语义稳定，可随意设计但应可复用。"
             "3) content 用中文简洁陈述，不带解释。"
+            "4) 含明显阶段性进展/会议/计划/总结等信息时，优先使用 episode。"
             f"\n上下文:\n{context_text}"
             f"\n用户输入:\n{text}"
         )

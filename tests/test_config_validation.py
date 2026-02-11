@@ -9,6 +9,11 @@ def test_load_default_config() -> None:
     cfg = load_config()
     assert cfg.llm.model
     assert cfg.skills.timeout_sec > 0
+    assert cfg.memory.default_mem_type in {"auto", "profile", "fact", "episode"}
+    assert cfg.memory.episode_retention_days > 0
+    assert cfg.memory.episode_recent_days > 0
+    assert cfg.memory.episode_decay_half_life_days > 0
+    assert cfg.memory.episode_trigger_keywords
 
 
 def test_env_substitution(tmp_path: Path, monkeypatch) -> None:

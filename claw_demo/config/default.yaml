@@ -23,6 +23,21 @@ memory:
   grep_context_lines: 6
   max_item_chars: 1200
   enable_auto_extract: true
+  default_mem_type: auto
+  episode_retention_days: 14
+  episode_recent_days: 7
+  episode_recent_boost: 2
+  episode_stale_penalty: 2
+  episode_decay_half_life_days: 3
+  episode_trigger_keywords:
+    - 进展
+    - 今天做了
+    - 刚完成
+    - 刚遇到问题
+    - 决定
+    - 总结
+    - 会议
+    - 计划
 
 skills:
   enabled:

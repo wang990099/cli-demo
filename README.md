@@ -39,6 +39,9 @@ cp .env.example .env
 记忆抽取说明：
 - 自动记忆抽取由 LLM 完成（自由理解后存储）
 - 内部流程为 `propose -> verify -> commit`，先产出候选记忆，再审核后写入
+- `episode` 默认按关键词触发（如“进展/今天做了/刚完成/决定/总结/会议/计划”）
+- `episode` 仅保留最近 N 天（默认 14 天），写入 `episodes/YYYY-MM-DD-episode.md`
+- 检索时对 `episode` 使用时间衰减函数（半衰期可配），近期加权更高、陈旧记忆自动衰减
 - 需要可用的 `OPENAI_API_KEY`（或你的兼容网关 key）
 - 无 key 时不会自动写入长期记忆（手动 `claw mem add` 仍可用）
 
@@ -74,6 +77,9 @@ claw chat
 
 Chat 内命令：
 - `/help` 查看命令帮助
+- `/command help <命令>` 查看某个命令详细使用
+- `/memtype` 查看当前会话记忆类型
+- `/memtype auto|profile|fact|episode` 切换记忆类型
 - `/trace` 查看最近一次工作流轨迹
 - `/trace on|off` 开关自动显示工作流轨迹
 - `/stream on|off` 开关流式输出
