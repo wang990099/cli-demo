@@ -85,8 +85,8 @@ def test_llm_extractor_overwrites_same_key(tmp_path: Path) -> None:
 
     rows = manager.search("喜欢")
     assert rows
-    assert "奶茶" in rows[0].entry.content
-    assert "咖啡" not in rows[0].entry.content
+    joined = "\n".join(item.entry.content for item in rows)
+    assert "奶茶" in joined
 
 
 def test_extractor_no_output_keeps_memory_unchanged(tmp_path: Path) -> None:
@@ -119,7 +119,7 @@ def test_verify_stage_filters_proposed_records(tmp_path: Path) -> None:
     manager.maybe_auto_extract("输入")
     rows = manager.search("喜欢")
     assert rows
-    assert rows[0].entry.key == "pref:drink"
+    assert rows[0].entry.key.startswith("pref:like:")
     assert all(r.entry.key != "noise:tmp" for r in rows)
 
 
@@ -212,3 +212,106 @@ def test_episode_decay_prefers_newer_episode(tmp_path: Path) -> None:
     rows = manager.search("今天 完成 联调 总结")
     assert rows
     assert rows[0].entry.key == "episode:new"
+
+
+def test_profile_repair_merges_preference_conflicts(tmp_path: Path) -> None:
+    cfg = load_config()
+    cfg.memory.root = "./memory"
+    profile = tmp_path / "memory" / "profile.md"
+    profile.parent.mkdir(parents=True, exist_ok=True)
+    profile.write_text(
+        (
+            "## beverage_preference\n"
+            "- type: profile\n"
+            "- tags: 喜好,饮品\n"
+            "- updated_at: 2026-02-11\n"
+            "- content: 喜欢咖啡\n"
+            "## user_hobby_coffee\n"
+            "- type: profile\n"
+            "- tags: 喜好,饮品\n"
+            "- updated_at: 2026-02-11T08:00:01\n"
+            "- content: 不再喜欢咖啡\n"
+            "## user_preference_drink\n"
+            "- type: profile\n"
+            "- tags: 喜好,饮品\n"
+            "- updated_at: 2026-02-11T09:00:01\n"
+            "- content: 喜欢奶茶\n"
+            "## user_preference_sport\n"
+            "- type: profile\n"
+            "- tags: 喜好,运动\n"
+            "- updated_at: 2026-02-11T09:10:01\n"
+            "- content: 喜欢游泳\n"
+        ),
+        encoding="utf-8",
+    )
+
+    MemoryManager(config=cfg, project_root=tmp_path)
+    repaired = profile.read_text(encoding="utf-8")
+    assert "pref:dislike:咖啡" in repaired
+    assert "pref:like:奶茶" in repaired
+    assert "pref:like:游泳" in repaired
+    assert "## beverage_preference" not in repaired
+    assert "- content: 喜欢咖啡" not in repaired
+
+
+def test_updated_at_written_with_second_precision(tmp_path: Path) -> None:
+    cfg = load_config()
+    cfg.memory.root = "./memory"
+    manager = MemoryManager(config=cfg, project_root=tmp_path)
+    manager.add(key="k", mem_type="fact", content="v")
+    text = (tmp_path / "memory" / "facts.md").read_text(encoding="utf-8")
+    assert "updated_at: " in text
+    assert "T" in text
+    assert len([line for line in text.splitlines() if line.startswith("- updated_at: ")][0].split(": ", 1)[1]) >= 19
+
+
+def test_index_rebuild_removes_stale_keys_after_profile_repair(tmp_path: Path) -> None:
+    cfg = load_config()
+    cfg.memory.root = "./memory"
+    profile = tmp_path / "memory" / "profile.md"
+    index = tmp_path / "memory" / "index" / "memory_keys.tsv"
+    profile.parent.mkdir(parents=True, exist_ok=True)
+    index.parent.mkdir(parents=True, exist_ok=True)
+    profile.write_text(
+        (
+            "## old_pref_key\n"
+            "- type: profile\n"
+            "- tags: 喜好\n"
+            "- updated_at: 2026-02-11\n"
+            "- content: 喜欢奶茶\n"
+        ),
+        encoding="utf-8",
+    )
+    index.write_text("old_pref_key\tprofile.md\n", encoding="utf-8")
+
+    MemoryManager(config=cfg, project_root=tmp_path)
+    rebuilt = index.read_text(encoding="utf-8")
+    assert "old_pref_key" not in rebuilt
+    assert "pref:like:奶茶\tprofile.md" in rebuilt
+
+
+def test_preference_sentence_with_like_and_dislike_extracts_both(tmp_path: Path) -> None:
+    cfg = load_config()
+    cfg.memory.root = "./memory"
+
+    stub = StubExtractor({"我现在不喜欢咖啡了，我现在喜欢奶茶": []})
+    manager = MemoryManager(config=cfg, project_root=tmp_path, extractor=stub)
+    manager.maybe_auto_extract("我现在不喜欢咖啡了，我现在喜欢奶茶")
+
+    rows = manager.search("喜欢")
+    joined = "\n".join(item.entry.content for item in rows)
+    assert "不喜欢咖啡" in joined
+    assert "喜欢奶茶" in joined
+
+
+def test_preference_conflict_same_second_keeps_latest_statement(tmp_path: Path) -> None:
+    cfg = load_config()
+    cfg.memory.root = "./memory"
+    manager = MemoryManager(config=cfg, project_root=tmp_path)
+    manager.add("a", "profile", "喜欢咖啡", ["爱好", "饮品"])
+    manager.maybe_auto_extract("我现在不喜欢咖啡了")
+
+    rows = manager.search("咖啡")
+    assert rows
+    joined = "\n".join(item.entry.content for item in rows)
+    assert "不喜欢咖啡" in joined

@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from datetime import date
 from typing import Protocol
 
 from pydantic import BaseModel, Field, ValidationError
 
 from claw_demo.config.schema import Config
 from claw_demo.memory.grep_retriever import MemoryEntry
+from claw_demo.memory.normalize import now_ts
 
 
 class MemoryRecord(BaseModel):
@@ -89,13 +89,12 @@ class LLMMemoryExtractor:
             raw = (resp.choices[0].message.content or "").strip()
             parsed = self._parse_records(raw)
             if parsed is not None:
-                today = date.today().isoformat()
                 return [
                     MemoryEntry(
                         key=record.key,
                         mem_type=record.mem_type,
                         tags=record.tags,
-                        updated_at=today,
+                        updated_at=now_ts(),
                         content=record.content,
                         source_file=None,
                     )

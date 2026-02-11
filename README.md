@@ -39,6 +39,8 @@ cp .env.example .env
 记忆抽取说明：
 - 自动记忆抽取由 LLM 完成（自由理解后存储）
 - 内部流程为 `propose -> verify -> commit`，先产出候选记忆，再审核后写入
+- `profile` 记忆会做规范化整理（偏好类自动收敛为 `pref:like:*` / `pref:dislike:*`，冲突按最新时间保留）
+- 所有记忆 `updated_at` 统一为秒级时间戳（ISO，`YYYY-MM-DDTHH:MM:SS`）
 - `episode` 默认按关键词触发（如“进展/今天做了/刚完成/决定/总结/会议/计划”）
 - `episode` 仅保留最近 N 天（默认 14 天），写入 `episodes/YYYY-MM-DD-episode.md`
 - 检索时对 `episode` 使用时间衰减函数（半衰期可配），近期加权更高、陈旧记忆自动衰减
