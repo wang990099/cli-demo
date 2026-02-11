@@ -5,7 +5,7 @@ Python CLI Demo，支持：
 - Chat 流式输出（可在会话内开关）
 - 渐进式 grep 记忆
 - 基于模型理解的自动记忆抽取（非规则）
-- Agent Skills：`weather` / `file_search` / `file_read` / `summarize` / `email`
+- Agent Skills：`weather` / `time` / `file_search` / `file_read` / `summarize` / `email`
 - OpenAI v1 compatible SDK
 - 默认配置文件 + `.env` 环境变量
 
@@ -74,6 +74,8 @@ claw chat
 
 Chat 内命令：
 - `/help` 查看命令帮助
+- `/trace` 查看最近一次工作流轨迹
+- `/trace on|off` 开关自动显示工作流轨迹
 - `/stream on|off` 开关流式输出
 - `/dryrun on|off` 开关邮件 dry-run
 

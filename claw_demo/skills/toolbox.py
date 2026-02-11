@@ -4,6 +4,7 @@ import smtplib
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import requests
 from pydantic import BaseModel, Field, ValidationError
@@ -32,6 +33,10 @@ class EmailToolArgs(BaseModel):
     to: str
     subject: str
     body: str
+
+
+class TimeToolArgs(BaseModel):
+    timezone: str | None = None
 
 
 TOOL_SCHEMAS: list[dict[str, Any]] = [
@@ -103,6 +108,19 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "body": {"type": "string"},
                 },
                 "required": ["to", "subject", "body"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "time",
+            "description": "获取当前时间",
+            "parameters": {
+                "type": "object",
+                "properties": {"timezone": {"type": "string"}},
+                "required": [],
                 "additionalProperties": False,
             },
         },
@@ -238,6 +256,22 @@ def _run_email(args: EmailToolArgs, ctx: SkillContext) -> SkillResult:
         return SkillResult(ok=False, text=f"邮件发送失败: {exc}")
 
 
+def _run_time(args: TimeToolArgs, ctx: SkillContext) -> SkillResult:
+    tz_name = (args.timezone or ctx.config.app.timezone).strip() or "UTC"
+    try:
+        from datetime import datetime, timezone
+
+        local_now = datetime.now(ZoneInfo(tz_name))
+        utc_now = datetime.now(timezone.utc)
+        text = (
+            f"当前时间({tz_name}): {local_now.strftime('%Y-%m-%d %H:%M:%S %Z')}\\n"
+            f"UTC: {utc_now.strftime('%Y-%m-%d %H:%M:%S %Z')}"
+        )
+        return SkillResult(ok=True, text=text)
+    except Exception:
+        return SkillResult(ok=False, text=f"无效时区或获取时间失败: {tz_name}")
+
+
 class ToolExecutor:
     def execute(self, tool_name: str, tool_args: dict[str, Any], ctx: SkillContext) -> SkillResult:
         try:
@@ -251,6 +285,8 @@ class ToolExecutor:
                 return _run_summarize(SummarizeToolArgs.model_validate(tool_args), ctx)
             if tool_name == "email":
                 return _run_email(EmailToolArgs.model_validate(tool_args), ctx)
+            if tool_name == "time":
+                return _run_time(TimeToolArgs.model_validate(tool_args), ctx)
             return SkillResult(ok=False, text=f"未知工具: {tool_name}")
         except ValidationError as exc:
             return SkillResult(ok=False, text=f"工具参数错误: {exc}")

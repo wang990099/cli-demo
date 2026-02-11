@@ -27,6 +27,7 @@ memory:
 skills:
   enabled:
     - weather
+    - time
     - file_search
     - file_read
     - summarize

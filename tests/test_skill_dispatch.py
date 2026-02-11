@@ -25,6 +25,7 @@ def test_skill_manifest_loading_and_check_report() -> None:
     dispatcher = AgentSkillDispatcher(config=cfg, project_root=Path.cwd())
     skills = dispatcher.enabled_skills()
     assert "weather" in skills
+    assert "time" in skills
     assert "file_search" in skills
 
     reports = dispatcher.health_check_detailed()
@@ -89,3 +90,15 @@ description: 外部自定义技能
     assert "custom_echo" in dispatcher.enabled_skills()
     report = dispatcher.health_check_detailed()["custom_echo"]
     assert any("external source:" in item for item in report.runtime)
+
+
+def test_tool_executor_time(tmp_path: Path) -> None:
+    cfg = load_config()
+    cfg.file_access.workspace_dir = str(tmp_path)
+    cfg.app.timezone = "Asia/Shanghai"
+
+    executor = ToolExecutor()
+    ctx = SkillContext(config=cfg, project_root=tmp_path, workspace_root=tmp_path)
+    result = executor.execute("time", {}, ctx)
+    assert result.ok
+    assert "当前时间(Asia/Shanghai)" in result.text

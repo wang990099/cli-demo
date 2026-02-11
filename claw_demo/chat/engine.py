@@ -3,10 +3,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from claw_demo.chat.prompt_builder import build_messages
+from claw_demo.agent.workflow_runner import WorkflowAgentRunner
 from claw_demo.chat.slash_commands import SlashResult, parse_slash
 from claw_demo.config.schema import Config
-from claw_demo.llm.client import LLMClient
 from claw_demo.memory.manager import MemoryManager
 from claw_demo.skills.dispatcher import AgentSkillDispatcher
 
@@ -18,6 +17,8 @@ HELP_TEXT = (
     "/reset - 清空短期会话\n"
     "/mem - 查看当前注入记忆\n"
     "/skills - 查看可用 skills\n"
+    "/trace - 查看最近一次工作流轨迹\n"
+    "/trace on|off - 开关自动显示轨迹\n"
     "/dryrun on|off - 开关邮件 dry-run\n"
     "/stream on|off - 开关流式输出"
 )
@@ -29,9 +30,11 @@ class ChatEngine:
         self.project_root = project_root
         self.history: list[dict[str, str]] = []
         self.last_memories: list[str] = []
+        self.last_tool_trace: list[str] = []
+        self.trace_auto_show = False
         self.memory = MemoryManager(config=config, project_root=project_root)
         self.dispatcher = AgentSkillDispatcher(config=config, project_root=project_root)
-        self.llm = LLMClient(config=config)
+        self.workflow_runner = WorkflowAgentRunner(config=config, project_root=project_root)
         self._prompt_session = self._build_prompt_session()
 
     def _build_prompt_session(self):
@@ -84,42 +87,24 @@ class ChatEngine:
         self.last_memories = [f"{m.entry.key}: {m.snippet}" for m in memories]
 
         recent = self.history[-(self.config.chat.recent_turns * 2) :]
-        messages = build_messages(
-            "你是一个 CLI AI 助手。必要时使用技能。",
-            recent=recent,
-            user_text=user_input,
-            memories=memories,
-        )
 
-        envelope = self.llm.plan_or_answer(
-            messages=messages,
+        result = self.workflow_runner.run(
+            user_input=user_input,
+            recent_messages=recent,
             memory_snippets=self.last_memories,
-            skill_names=self.dispatcher.enabled_skills(),
         )
-
-        if envelope.type == "skill_call" and envelope.skill is not None:
-            request_text = envelope.skill.args.get("request") if isinstance(envelope.skill.args, dict) else None
-            skill_res = self.dispatcher.dispatch(
-                envelope.skill.name,
-                request_text=request_text or user_input,
-                recent_messages=recent,
-                memory_snippets=self.last_memories,
-            )
-            text = skill_res.text
-            if stream_writer is not None:
-                chunks = []
-                for chunk in self.llm.stream_text(text):
-                    chunks.append(chunk)
-                    stream_writer(chunk)
-                text = "".join(chunks)
-        else:
-            text = envelope.text
-            if stream_writer is not None:
-                chunks = []
-                for chunk in self.llm.stream_text(text):
-                    chunks.append(chunk)
-                    stream_writer(chunk)
-                text = "".join(chunks)
+        text = result.text
+        self.last_tool_trace = result.tool_trace
+        if self.trace_auto_show and self.last_tool_trace:
+            text = text + "\n\n[trace]\n" + "\n".join(self.last_tool_trace)
+        if stream_writer is not None:
+            chunks = []
+            chunk_size = 16
+            for i in range(0, len(text), chunk_size):
+                chunk = text[i : i + chunk_size]
+                chunks.append(chunk)
+                stream_writer(chunk)
+            text = "".join(chunks)
 
         self.history.append({"role": "user", "content": user_input})
         self.history.append({"role": "assistant", "content": text})
@@ -143,6 +128,12 @@ class ChatEngine:
             return SlashResult(handled=True, output=text)
         if cmd == "/skills":
             return SlashResult(handled=True, output=", ".join(self.dispatcher.enabled_skills()))
+        if cmd == "/trace":
+            if arg in {"on", "off"}:
+                self.trace_auto_show = arg == "on"
+                return SlashResult(handled=True, output=f"trace auto show = {self.trace_auto_show}")
+            text = "\n".join(self.last_tool_trace) if self.last_tool_trace else "当前无工作流轨迹"
+            return SlashResult(handled=True, output=text)
         if cmd == "/dryrun":
             if arg not in {"on", "off"}:
                 return SlashResult(handled=True, output="用法: /dryrun on|off")

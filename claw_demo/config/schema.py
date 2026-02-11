@@ -37,7 +37,9 @@ class MemoryConfig(BaseModel):
 
 
 class SkillsConfig(BaseModel):
-    enabled: list[str] = Field(default_factory=lambda: ["weather", "file_search", "file_read", "summarize", "email"])
+    enabled: list[str] = Field(
+        default_factory=lambda: ["weather", "time", "file_search", "file_read", "summarize", "email"]
+    )
     timeout_sec: int = 20
     max_steps: int = 6
     import_dirs: list[str] = Field(default_factory=list)
