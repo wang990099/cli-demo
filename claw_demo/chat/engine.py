@@ -126,7 +126,7 @@ class ChatEngine:
 
         self.history.append({"role": "user", "content": user_input})
         self.history.append({"role": "assistant", "content": text})
-        self.memory.maybe_auto_extract(user_input)
+        self.memory.maybe_auto_extract(user_input, recent_messages=self.history[-8:])
         return text
 
     def _handle_slash(self, user_input: str) -> SlashResult:

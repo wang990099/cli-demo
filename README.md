@@ -4,6 +4,7 @@ Python CLI Demo，支持：
 - Chat CLI
 - Chat 流式输出（可在会话内开关）
 - 渐进式 grep 记忆
+- 基于模型理解的自动记忆抽取（非规则）
 - Skills：`weather` / `file_search` / `file_read` / `summarize` / `email`
 - OpenAI v1 compatible SDK
 - 默认配置文件 + `.env` 环境变量
@@ -34,6 +35,12 @@ cp .env.example .env
   - 未配置时，默认使用“运行目录同级”的 `workspace/`
   - 例如在 `/path/cli-demo` 运行时，默认是 `/path/workspace`
 - `SMTP_FROM`：邮件发件人地址（对应 `email.smtp.from`）
+
+记忆抽取说明：
+- 自动记忆抽取由 LLM 完成（自由理解后存储）
+- 内部流程为 `propose -> verify -> commit`，先产出候选记忆，再审核后写入
+- 需要可用的 `OPENAI_API_KEY`（或你的兼容网关 key）
+- 无 key 时不会自动写入长期记忆（手动 `claw mem add` 仍可用）
 
 邮件配置说明（`email.smtp`）：
 - `use_ssl=true`：使用 `SMTP_SSL`（如 465）

@@ -60,23 +60,6 @@ def _update_index(memory_root: Path, key: str, file_name: str) -> None:
     _atomic_write(index_path, body)
 
 
-def _remove_index_key(memory_root: Path, key: str) -> None:
-    index_path = memory_root / "index" / "memory_keys.tsv"
-    index_path.parent.mkdir(parents=True, exist_ok=True)
-    rows: dict[str, str] = {}
-    if index_path.exists():
-        for line in index_path.read_text(encoding="utf-8").splitlines():
-            if not line.strip() or "\t" not in line:
-                continue
-            k, v = line.split("\t", 1)
-            rows[k.strip()] = v.strip()
-    rows.pop(key, None)
-    body = "\n".join(f"{k}\t{v}" for k, v in sorted(rows.items()))
-    if body:
-        body += "\n"
-    _atomic_write(index_path, body)
-
-
 def upsert_entry(memory_root: Path, entry: MemoryEntry) -> None:
     target = _target_file(memory_root, entry.mem_type)
     existing = target.read_text(encoding="utf-8") if target.exists() else ""
@@ -85,19 +68,6 @@ def upsert_entry(memory_root: Path, entry: MemoryEntry) -> None:
     content = "\n".join(block.strip() for _, block in sorted(blocks.items())) + "\n"
     _atomic_write(target, content)
     _update_index(memory_root, entry.key, target.name)
-
-
-def delete_entry(memory_root: Path, key: str, mem_type: str = "profile") -> None:
-    target = _target_file(memory_root, mem_type)
-    existing = target.read_text(encoding="utf-8") if target.exists() else ""
-    blocks = _parse_blocks(existing)
-    if key in blocks:
-        del blocks[key]
-        body = "\n".join(block.strip() for _, block in sorted(blocks.items()))
-        if body:
-            body += "\n"
-        _atomic_write(target, body)
-    _remove_index_key(memory_root, key)
 
 
 def purge_memory(memory_root: Path, scope: str) -> None:

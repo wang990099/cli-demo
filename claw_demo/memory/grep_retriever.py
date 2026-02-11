@@ -101,11 +101,6 @@ def _is_recent(updated_at: str) -> bool:
 
 
 def _snippet(entry: MemoryEntry, query_tokens: list[str]) -> str:
-    # Prefer content for preference records; returning only key (pref:like)
-    # makes downstream answers lose the actual preference value.
-    if entry.key in {"pref:like", "pref:dislike"} and entry.content:
-        return entry.content[:240]
-
     text = f"{entry.content}\n{entry.key}" if entry.content else entry.key
     if not query_tokens:
         return text[:240]
@@ -121,21 +116,12 @@ def _snippet(entry: MemoryEntry, query_tokens: list[str]) -> str:
 
 def progressive_retrieve(memory_root: Path, query: str, top_k: int = 3) -> list[RetrievedMemory]:
     query_tokens = normalize_query(query)
-    query_text = query.lower()
-    ask_marker = any(marker in query_text for marker in ("什么", "啥", "哪些", "哪一些"))
-    pref_like_intent = ask_marker and ("喜欢" in query_text) and ("不喜欢" not in query_text)
-    pref_dislike_intent = ask_marker and ("不喜欢" in query_text)
     entries = load_all_entries(memory_root)
 
     scored: list[RetrievedMemory] = []
     seen_topic_prefix: set[str] = set()
 
     for entry in entries:
-        if pref_like_intent and entry.key != "pref:like":
-            continue
-        if pref_dislike_intent and entry.key != "pref:dislike":
-            continue
-
         key_l = entry.key.lower()
         tags_l = [t.lower() for t in entry.tags]
         content_l = entry.content.lower()
@@ -143,13 +129,8 @@ def progressive_retrieve(memory_root: Path, query: str, top_k: int = 3) -> list[
         key_hit = any(tok in key_l for tok in query_tokens)
         title_tag_hit = any(tok in key_l or tok in tags_l for tok in query_tokens)
         content_hit = any(tok in content_l for tok in query_tokens)
-        semantic_pref_hit = False
-        if pref_like_intent and entry.key == "pref:like":
-            semantic_pref_hit = True
-        if pref_dislike_intent and entry.key == "pref:dislike":
-            semantic_pref_hit = True
 
-        if query_tokens and not (key_hit or title_tag_hit or content_hit or semantic_pref_hit):
+        if query_tokens and not (key_hit or title_tag_hit or content_hit):
             continue
 
         score = 0
@@ -159,8 +140,6 @@ def progressive_retrieve(memory_root: Path, query: str, top_k: int = 3) -> list[
             score += 2
         if content_hit:
             score += 1
-        if semantic_pref_hit:
-            score += 3
         if _is_recent(entry.updated_at):
             score += 1
 

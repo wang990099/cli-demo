@@ -4,6 +4,26 @@ from pathlib import Path
 
 from claw_demo.chat.engine import ChatEngine
 from claw_demo.config.loader import load_config
+from claw_demo.memory.grep_retriever import MemoryEntry
+
+
+class StubExtractor:
+    def __init__(self, mapping: dict[str, list[MemoryEntry]]) -> None:
+        self.mapping = mapping
+
+    def extract(self, user_text: str, recent_messages=None) -> list[MemoryEntry]:
+        return self.mapping.get(user_text, [])
+
+
+def _entry(key: str, mem_type: str, content: str, tags: list[str] | None = None) -> MemoryEntry:
+    return MemoryEntry(
+        key=key,
+        mem_type=mem_type,
+        tags=tags or [mem_type],
+        updated_at="2026-02-11",
+        content=content,
+        source_file=None,
+    )
 
 
 def test_chat_skill_roundtrip(tmp_path: Path) -> None:
@@ -18,49 +38,48 @@ def test_chat_skill_roundtrip(tmp_path: Path) -> None:
     assert "hello" in out
 
 
-def test_auto_memory_extract(tmp_path: Path) -> None:
+def test_auto_memory_extract_with_injected_llm_extractor(tmp_path: Path) -> None:
     cfg = load_config()
     cfg.memory.root = "./memory"
     cfg.file_access.workspace_dir = str(tmp_path)
     cfg.llm.api_key = ""
 
     engine = ChatEngine(config=cfg, project_root=tmp_path)
-    engine.handle_user_input("我喜欢简洁回答")
-    rows = engine.memory.search("喜欢")
-    assert rows
+    engine.memory.extractor = StubExtractor(
+        {
+            "我喜欢奶茶": [_entry("pref:drink", "profile", "用户喜欢奶茶", ["pref", "drink"])],
+            "我还喜欢游泳": [_entry("pref:hobby", "profile", "用户喜欢游泳", ["pref", "hobby"])],
+        }
+    )
 
-
-def test_auto_memory_extract_preference_update(tmp_path: Path) -> None:
-    cfg = load_config()
-    cfg.memory.root = "./memory"
-    cfg.file_access.workspace_dir = str(tmp_path)
-    cfg.llm.api_key = ""
-
-    engine = ChatEngine(config=cfg, project_root=tmp_path)
-    engine.handle_user_input("我喜欢咖啡")
-    engine.handle_user_input("我现在喜欢奶茶了，不喜欢咖啡了")
-    like_rows = engine.memory.search("我喜欢什么")
-    dislike_rows = engine.memory.search("我不喜欢什么")
-    assert like_rows and like_rows[0].entry.key == "pref:like"
-    assert "奶茶" in like_rows[0].entry.content
-    assert dislike_rows and dislike_rows[0].entry.key == "pref:dislike"
-
-
-def test_reset_does_not_drop_long_term_preferences(tmp_path: Path) -> None:
-    cfg = load_config()
-    cfg.memory.root = "./memory"
-    cfg.file_access.workspace_dir = str(tmp_path)
-    cfg.llm.api_key = ""
-
-    engine = ChatEngine(config=cfg, project_root=tmp_path)
     engine.handle_user_input("我喜欢奶茶")
     engine.handle_user_input("我还喜欢游泳")
+    rows = engine.memory.search("喜欢")
+    assert rows
+    text = "\n".join(item.entry.content for item in rows)
+    assert "奶茶" in text
+    assert "游泳" in text
+
+
+def test_reset_does_not_drop_long_term_memory(tmp_path: Path) -> None:
+    cfg = load_config()
+    cfg.memory.root = "./memory"
+    cfg.file_access.workspace_dir = str(tmp_path)
+    cfg.llm.api_key = ""
+
+    engine = ChatEngine(config=cfg, project_root=tmp_path)
+    engine.memory.extractor = StubExtractor(
+        {
+            "记住我喜欢奶茶": [_entry("pref:drink", "profile", "用户喜欢奶茶", ["pref"])],
+        }
+    )
+    engine.handle_user_input("记住我喜欢奶茶")
     res = engine._handle_slash("/reset")
     assert res.handled
-    like_rows = engine.memory.search("我喜欢什么")
-    assert like_rows
-    assert "奶茶" in like_rows[0].entry.content
-    assert "游泳" in like_rows[0].entry.content
+
+    rows = engine.memory.search("喜欢")
+    assert rows
+    assert "奶茶" in rows[0].entry.content
 
 
 def test_chat_stream_writer(tmp_path: Path) -> None:
