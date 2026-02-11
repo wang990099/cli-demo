@@ -1,0 +1,4 @@
+id,name,email,plan
+1001,Alice,alice@example.com,pro
+1002,Bob,bob@example.com,free
+1003,Carol,carol@example.com,team

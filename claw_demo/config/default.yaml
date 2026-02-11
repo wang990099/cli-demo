@@ -1,0 +1,55 @@
+app:
+  name: claw-cli-demo
+  timezone: Asia/Shanghai
+  verbose: false
+
+llm:
+  provider: openai_compatible
+  model: gpt-4o-mini
+  base_url: https://api.openai.com/v1
+  api_key: ${OPENAI_API_KEY}
+  temperature: 0.3
+  timeout_sec: 60
+  max_retries: 2
+
+chat:
+  recent_turns: 8
+  max_context_chars: 12000
+  stream: true
+
+memory:
+  root: ./claw_demo/memory/store
+  inject_top_k: 3
+  grep_context_lines: 6
+  max_item_chars: 1200
+  enable_auto_extract: true
+
+skills:
+  enabled:
+    - weather
+    - file_search
+    - file_read
+    - summarize
+    - email
+  timeout_sec: 20
+
+file_access:
+  workspace_dir: ${WORKSPACE_DIR}
+  allowed_roots:
+    - ./
+  max_read_bytes: 262144
+
+weather:
+  provider: open-meteo
+  default_city: Shanghai
+  units: metric
+
+email:
+  enabled: false
+  dry_run: true
+  smtp:
+    host: smtp.example.com
+    port: 587
+    username: ${SMTP_USERNAME}
+    password: ${SMTP_PASSWORD}
+    from: bot@example.com

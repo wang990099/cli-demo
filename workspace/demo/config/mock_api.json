@@ -1,0 +1,7 @@
+{
+  "service": "demo-user-service",
+  "base_url": "https://api.example.local",
+  "timeout_ms": 1500,
+  "retry": 2,
+  "features": ["search", "read", "summarize"]
+}

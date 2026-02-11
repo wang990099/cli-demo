@@ -1,0 +1,4 @@
+Customer Feedback Samples:
+1) Search result naming is unclear.
+2) Need faster first response after startup.
+3) Add export button for monthly reports.
