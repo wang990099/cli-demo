@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from claw_demo.chat.prompt_builder import build_messages
@@ -8,6 +9,18 @@ from claw_demo.config.schema import Config
 from claw_demo.llm.client import LLMClient
 from claw_demo.memory.manager import MemoryManager
 from claw_demo.skills.dispatcher import SkillDispatcher
+
+
+HELP_TEXT = (
+    "可用命令:\n"
+    "/help - 查看帮助\n"
+    "/exit - 退出聊天\n"
+    "/reset - 清空短期会话\n"
+    "/mem - 查看当前注入记忆\n"
+    "/skills - 查看可用 skills\n"
+    "/dryrun on|off - 开关邮件 dry-run\n"
+    "/stream on|off - 开关流式输出"
+)
 
 
 class ChatEngine:
@@ -19,11 +32,31 @@ class ChatEngine:
         self.memory = MemoryManager(config=config, project_root=project_root)
         self.dispatcher = SkillDispatcher(config=config, project_root=project_root)
         self.llm = LLMClient(config=config)
+        self._prompt_session = self._build_prompt_session()
+
+    def _build_prompt_session(self):
+        try:
+            from prompt_toolkit import PromptSession
+
+            return PromptSession()
+        except Exception:
+            return None
+
+    def _read_user_input(self) -> str:
+        if self._prompt_session is not None:
+            try:
+                return self._prompt_session.prompt("you> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                return "/exit"
+        try:
+            return input("you> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return "/exit"
 
     def run_loop(self) -> None:
-        print("Claw CLI Demo. 输入 /exit 退出")
+        print("Claw CLI Demo. 输入 /help 查看命令帮助，/exit 退出")
         while True:
-            user_input = input("you> ").strip()
+            user_input = self._read_user_input()
             if not user_input:
                 continue
             slash = self._handle_slash(user_input)
@@ -34,10 +67,19 @@ class ChatEngine:
                     break
                 continue
 
-            answer = self.handle_user_input(user_input)
-            print(f"bot> {answer}")
+            if self.config.chat.stream:
+                print("bot> ", end="", flush=True)
+                answer = self.handle_user_input(user_input, stream_writer=lambda chunk: print(chunk, end="", flush=True))
+                print()
+            else:
+                answer = self.handle_user_input(user_input)
+                print(f"bot> {answer}")
 
-    def handle_user_input(self, user_input: str) -> str:
+    def handle_user_input(
+        self,
+        user_input: str,
+        stream_writer: Callable[[str], None] | None = None,
+    ) -> str:
         memories = self.memory.search(user_input)
         self.last_memories = [f"{m.entry.key}: {m.snippet}" for m in memories]
 
@@ -57,9 +99,30 @@ class ChatEngine:
 
         if envelope.type == "skill_call" and envelope.skill is not None:
             skill_res = self.dispatcher.dispatch(envelope.skill.name, envelope.skill.args)
-            text = self.llm.finalize_with_skill(user_text=user_input, skill_name=envelope.skill.name, skill_result_text=skill_res.text)
+            if stream_writer is None:
+                text = self.llm.finalize_with_skill(
+                    user_text=user_input,
+                    skill_name=envelope.skill.name,
+                    skill_result_text=skill_res.text,
+                )
+            else:
+                chunks: list[str] = []
+                for chunk in self.llm.finalize_with_skill_stream(
+                    user_text=user_input,
+                    skill_name=envelope.skill.name,
+                    skill_result_text=skill_res.text,
+                ):
+                    chunks.append(chunk)
+                    stream_writer(chunk)
+                text = "".join(chunks)
         else:
             text = envelope.text
+            if stream_writer is not None:
+                chunks = []
+                for chunk in self.llm.stream_text(text):
+                    chunks.append(chunk)
+                    stream_writer(chunk)
+                text = "".join(chunks)
 
         self.history.append({"role": "user", "content": user_input})
         self.history.append({"role": "assistant", "content": text})
@@ -73,6 +136,8 @@ class ChatEngine:
 
         if cmd == "/exit":
             return SlashResult(handled=True, should_exit=True)
+        if cmd == "/help":
+            return SlashResult(handled=True, output=HELP_TEXT)
         if cmd == "/reset":
             self.history.clear()
             return SlashResult(handled=True, reset_history=True, output="短期会话已清空")
@@ -86,4 +151,9 @@ class ChatEngine:
                 return SlashResult(handled=True, output="用法: /dryrun on|off")
             self.config.email.dry_run = arg == "on"
             return SlashResult(handled=True, output=f"email dry-run = {self.config.email.dry_run}")
+        if cmd == "/stream":
+            if arg not in {"on", "off"}:
+                return SlashResult(handled=True, output="用法: /stream on|off")
+            self.config.chat.stream = arg == "on"
+            return SlashResult(handled=True, output=f"chat stream = {self.config.chat.stream}")
         return SlashResult(handled=True, output=f"未知命令: {cmd}")

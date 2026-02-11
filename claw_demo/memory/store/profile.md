@@ -1,5 +1,10 @@
-## pref:answer_style
+## pref:dislike
 - type: profile
-- tags: preference
+- tags: pref,dislike,auto
 - updated_at: 2026-02-11
-- content: 用户喜欢简洁回答。
+- content: 不喜欢: 咖啡
+## pref:like
+- type: profile
+- tags: pref,like,auto
+- updated_at: 2026-02-11
+- content: 喜欢: 游泳

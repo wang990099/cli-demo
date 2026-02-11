@@ -9,6 +9,7 @@ description = "Python CLI demo with skills and grep-style memory"
 requires-python = ">=3.10"
 dependencies = [
   "typer>=0.12.0",
+  "prompt-toolkit>=3.0.0",
   "pydantic>=2.6.0",
   "PyYAML>=6.0.0",
   "python-dotenv>=1.0.0",

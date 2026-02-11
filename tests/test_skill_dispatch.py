@@ -24,7 +24,15 @@ def test_email_dry_run(tmp_path: Path) -> None:
     cfg.file_access.workspace_dir = str(tmp_path)
     cfg.email.enabled = False
     cfg.email.dry_run = True
+    cfg.email.smtp.host = "smtp.163.com"
+    cfg.email.smtp.port = 465
+    cfg.email.smtp.use_ssl = True
+    cfg.email.smtp.use_tls = True
+    cfg.email.smtp.from_addr = "bot@163.com"
     dispatcher = SkillDispatcher(config=cfg, project_root=Path.cwd())
     result = dispatcher.dispatch("email", {"to": "a@b.com", "subject": "s", "body": "b"})
     assert result.ok
     assert "DRY-RUN" in result.text
+    assert "smtp.163.com:465" in result.text
+    assert "from=bot@163.com" in result.text
+    assert "已忽略 use_tls" in result.text

@@ -5,8 +5,8 @@ app:
 
 llm:
   provider: openai_compatible
-  model: gpt-4o-mini
-  base_url: https://api.openai.com/v1
+  model: anthropic/claude-opus-4.5
+  base_url: https://openrouter.ai/api/v1
   api_key: ${OPENAI_API_KEY}
   temperature: 0.3
   timeout_sec: 60
@@ -41,15 +41,18 @@ file_access:
 
 weather:
   provider: open-meteo
-  default_city: Shanghai
+  default_city: Zhejiang
   units: metric
 
 email:
   enabled: false
   dry_run: true
   smtp:
-    host: smtp.example.com
-    port: 587
+    host: smtp.163.com
+    port: 465
+    use_ssl: true
+    use_tls: true
+    timeout: 30
     username: ${SMTP_USERNAME}
     password: ${SMTP_PASSWORD}
-    from: bot@example.com
+    from: ${SMTP_FROM}

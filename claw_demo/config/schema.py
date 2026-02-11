@@ -56,9 +56,26 @@ class WeatherConfig(BaseModel):
 class SMTPConfig(BaseModel):
     host: str = "smtp.example.com"
     port: int = 587
+    use_ssl: bool = False
+    use_tls: bool = True
+    timeout: int = 30
     username: str = ""
     password: str = ""
     from_addr: str = Field(default="bot@example.com", alias="from")
+
+    @field_validator("port")
+    @classmethod
+    def _validate_port(cls, value: int) -> int:
+        if not (1 <= value <= 65535):
+            raise ValueError("smtp.port must be between 1 and 65535")
+        return value
+
+    @field_validator("timeout")
+    @classmethod
+    def _validate_timeout(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("smtp.timeout must be > 0")
+        return value
 
 
 class EmailConfig(BaseModel):

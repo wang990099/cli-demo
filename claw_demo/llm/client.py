@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from collections.abc import Iterator
 
 from claw_demo.config.schema import Config
 from claw_demo.llm.planner import plan_locally
@@ -37,19 +37,58 @@ class LLMClient:
         return content
 
     def finalize_with_skill(self, user_text: str, skill_name: str, skill_result_text: str) -> str:
-        if self._client is None:
-            return f"已执行 {skill_name}:\n{skill_result_text}"
+        return "".join(self.finalize_with_skill_stream(user_text, skill_name, skill_result_text))
 
+    def finalize_with_skill_stream(
+        self,
+        user_text: str,
+        skill_name: str,
+        skill_result_text: str,
+    ) -> Iterator[str]:
+        if self._client is None:
+            yield from self.stream_text(f"已执行 {skill_name}:\n{skill_result_text}")
+            return
+
+        for chunk in self._stream_completion(
+            user_text=user_text,
+            skill_name=skill_name,
+            skill_result_text=skill_result_text,
+        ):
+            yield chunk
+
+    def stream_text(self, text: str, chunk_size: int = 16) -> Iterator[str]:
+        normalized = text or ""
+        for i in range(0, len(normalized), chunk_size):
+            yield normalized[i : i + chunk_size]
+
+    def _stream_completion(
+        self,
+        user_text: str,
+        skill_name: str,
+        skill_result_text: str,
+    ) -> Iterator[str]:
         prompt = (
             "请基于以下信息用简洁中文回答用户。"
             f"\n用户: {user_text}\n技能: {skill_name}\n结果: {skill_result_text}"
         )
-        resp = self._client.chat.completions.create(
+        stream = self._client.chat.completions.create(
             model=self.config.llm.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=self.config.llm.temperature,
+            stream=True,
         )
-        return resp.choices[0].message.content or skill_result_text
+        emitted = False
+        for event in stream:
+            if not event.choices:
+                continue
+            delta = event.choices[0].delta
+            content = (delta.content or "") if delta else ""
+            if content:
+                emitted = True
+                yield content
+        if not emitted:
+            # Stream mode can occasionally yield empty deltas only.
+            yield skill_result_text
 
     def _call_json(self, messages: list[dict[str, str]]) -> LLMResponseEnvelope | None:
         retry = self.config.llm.max_retries

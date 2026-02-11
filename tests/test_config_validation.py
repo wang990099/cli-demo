@@ -39,3 +39,28 @@ llm:
     monkeypatch.chdir(tmp_path)
     cfg = load_config(cfg_file)
     assert cfg.llm.api_key == "from_dotenv"
+
+
+def test_email_smtp_fields_and_from_env(tmp_path: Path, monkeypatch) -> None:
+    cfg_file = tmp_path / "cfg.yaml"
+    cfg_file.write_text(
+        """
+email:
+  smtp:
+    host: smtp.163.com
+    port: 465
+    use_ssl: true
+    use_tls: true
+    timeout: 30
+    from: ${SMTP_FROM}
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SMTP_FROM", "bot@163.com")
+    cfg = load_config(cfg_file)
+    assert cfg.email.smtp.host == "smtp.163.com"
+    assert cfg.email.smtp.port == 465
+    assert cfg.email.smtp.use_ssl is True
+    assert cfg.email.smtp.use_tls is True
+    assert cfg.email.smtp.timeout == 30
+    assert cfg.email.smtp.from_addr == "bot@163.com"
